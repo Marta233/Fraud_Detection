@@ -5,6 +5,7 @@ import datetime
 import ipaddress
 import plotly.express as px
 from sklearn.preprocessing import StandardScaler, OneHotEncoder
+import category_encoders as ce
 class FRAUD_EDA:
     def __init__(self, df: pd.DataFrame):
         self.df = df
@@ -238,11 +239,16 @@ class FRAUD_EDA:
         plt.show()
     def add_time_based_features(self):
         """Adds time-based features: 'hour_of_day' and 'day_of_week'."""
-        # Extract hour of the day from 'purchase_time'
-        self.merged_data['hour_of_day'] = self.merged_data['purchase_time'].dt.hour
-        
         # Extract day of the week from 'purchase_time' (Monday=0, Sunday=6)
-        self.merged_data['day_of_week'] = self.merged_data['purchase_time'].dt.dayofweek
+        self.merged_data['purchase_day_of_week'] = self.merged_data['purchase_time'].dt.dayofweek
+
+        self.merged_data['signup_hour'] = self.merged_data['signup_time'].dt.hour
+        self.merged_data['signup_day'] = self.merged_data['signup_time'].dt.day
+        self.merged_data['signup_month'] = self.merged_data['signup_time'].dt.month
+        self.merged_data['purchase_day'] = self.merged_data['purchase_time'].dt.day
+        self.merged_data['purchase_month'] = self.merged_data['purchase_time'].dt.month
+        self.merged_data['purchase__hour'] = self.merged_data['purchase_time'].dt.hour
+        
     
     def add_transaction_frequency_velocity(self):
         """Adds transaction frequency and velocity features."""
@@ -283,25 +289,23 @@ class FRAUD_EDA:
         # Display the resulting DataFrame
         self.merged_data
         return self.merged_data
-    def frequency_based(self):
-        # Frequency encoding for device_id
-        device_frequency = self.merged_data['device_id'].value_counts()
-        self.merged_data['device_id_frequency'] = self.merged_data['device_id'].map(device_frequency)
+    def Target_encoding(self):
+       # Initialize the TargetEncoder with smoothing (adjust the value of smoothing as needed)
+        target_encoder = ce.TargetEncoder(cols=['country'], smoothing=10)  # Here, 10 is the smoothing factor
 
-        # Frequency encoding for country
-        country_frequency = self.merged_data['country'].value_counts()
-        self.merged_data['country_frequency'] = self.merged_data['country'].map(country_frequency)
+        # Apply target encoding with smoothing
+        self.merged_data['Country_encoded'] = target_encoder.fit_transform(self.merged_data['country'], self.merged_data['class'])
+        target_encoder = ce.TargetEncoder(cols=['device_id'])
+        self.merged_data['device_id_encoded'] = target_encoder.fit_transform(self.merged_data['device_id'], self.merged_data['class'])
 
         # Display the DataFrame with frequency encodings
         return self.merged_data
     def normalize_and_scale(self):
         """Normalizes and scales numerical features."""
         # Identify numerical features for scaling
-        numerical_features = ['purchase_value', 'age', 'hour_of_day']
-        
+        numerical_features = ['purchase_value','Country_encoded', 'age', 'purchase_day_of_week', 'signup_hour', 'signup_day', 'signup_month','purchase_day', 'purchase_month', 'purchase__hour']
         # Initialize the StandardScaler
         scaler = StandardScaler()
-        
         # Fit and transform the numerical features
         self.merged_data[numerical_features] = scaler.fit_transform(self.merged_data[numerical_features])
         print("Numerical features scaled successfully.")
