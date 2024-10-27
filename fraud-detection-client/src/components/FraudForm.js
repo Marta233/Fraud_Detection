@@ -9,7 +9,7 @@ const FraudForm = () => {
         purchase_day_of_week: '',
         signup_day_of_week: '',
         signup_hour: '',
-        purchase_hour: '',
+        purchase__hour: '',
         category_Ads: '',
         category_Direct: '',
         category_SEO: '',

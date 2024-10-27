@@ -5,17 +5,14 @@ body {
     margin: 0;
     padding: 20px; /* Add padding around the body */
 }
-
 /* Heading Styles */
 h2 {
     text-align: center; /* Centered title */
-    color: #333; /* Dark gray color */
     margin: 40px;
 }
-
 /* Form Styles */
 form {
-    background: #fff; /* White background for the form */
+    background:rgb(202, 164, 164); /* White background for the form */
     padding: 20px; /* Padding inside the form */
     border-radius: 8px; /* Rounded corners */
     box-shadow: 0 0 10px rgba(0, 0, 0, 0.1); /* Subtle shadow */
@@ -33,7 +30,7 @@ form {
 }
 
 .background-image1{
-    margin-top: 50px;
+    margin-top: 20px;
 }
 /* Input Styles */
 input[type="number"] {
@@ -83,9 +80,9 @@ html, body {
     overflow-y: auto; /* Enable vertical scrolling */
     margin: 0 auto; /* Center the container */
 }
-h2 {
+.form-container h2 {
     font-family: 'Pacifico', cursive; /* Fancy font */
-    color: #3a3a3a; /* Darker color for better readability */
+    color:white; /* Darker color for better readability */
     font-size: 2.5rem; /* Adjust font size as needed */
     text-shadow: 2px 2px 5px rgba(0, 0, 0, 0.2); /* Add a soft shadow */
     margin-top: 20px;
