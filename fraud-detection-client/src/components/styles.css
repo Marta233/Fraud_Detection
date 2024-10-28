@@ -1,0 +1,89 @@
+/* Global Styles */
+body {
+    font-family: Arial, sans-serif;
+    background-color: #f4f4f4; /* Light gray background for the body */
+    margin: 0;
+    padding: 20px; /* Add padding around the body */
+}
+/* Heading Styles */
+h2 {
+    text-align: center; /* Centered title */
+    margin: 40px;
+}
+/* Form Styles */
+form {
+    background:rgb(202, 164, 164); /* White background for the form */
+    padding: 20px; /* Padding inside the form */
+    border-radius: 8px; /* Rounded corners */
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.1); /* Subtle shadow */
+    max-width: 600px; /* Maximum width for the form */
+    margin: 20px auto; /* Center the form horizontally */
+    display: flex; /* Flexbox layout */
+    flex-wrap: wrap; /* Allows items to wrap to the next line */
+}
+
+/* Form Group Styles */
+.form-group {
+    flex: 1 1 45%; /* Flex basis to allow space for margin */
+    padding: 10px; /* Padding around each input */
+    box-sizing: border-box; /* Ensure padding is included in width */
+}
+
+.background-image1{
+    margin-top: 20px;
+}
+/* Input Styles */
+input[type="number"] {
+    width: 100%; /* Full width */
+    padding: 10px; /* Padding inside the input */
+    border: 1px solid #ddd; /* Light border */
+    border-radius: 4px; /* Slightly rounded corners */
+    transition: border-color 0.3s ease; /* Transition for focus effect */
+}
+
+/* Input Focus Styles */
+input[type="number"]:focus {
+    border-color: #007BFF; /* Change border color on focus */
+    outline: none; /* Remove outline */
+}
+
+/* Button Styles */
+button {
+    width: 100%; /* Full width for the button */
+    padding: 10px; /* Padding inside the button */
+    background-color: #007BFF; /* Bootstrap primary color */
+    color: white; /* White text color */
+    border: none; /* No border */
+    border-radius: 4px; /* Rounded corners */
+    font-size: 16px; /* Font size */
+    cursor: pointer; /* Pointer cursor on hover */
+    transition: background-color 0.3s ease; /* Transition for hover effect */
+}
+
+/* Button Hover Styles */
+button:hover {
+    background-color: #0056b3; /* Darker blue on hover */
+}
+
+/* Result Heading Styles */
+h3 {
+    text-align: center; /* Centered result heading */
+    color: #333; /* Dark gray color */
+}
+html, body {
+    height: 100%; /* Ensure full height for scrolling */
+    overflow-y: auto; /* Allow vertical scrolling */
+    margin: 0; /* Remove default margin */
+}
+.form-container {
+    max-height: 80vh; /* Limit height to 80% of the viewport */
+    overflow-y: auto; /* Enable vertical scrolling */
+    margin: 0 auto; /* Center the container */
+}
+.form-container h2 {
+    font-family: 'Pacifico', cursive; /* Fancy font */
+    color:white; /* Darker color for better readability */
+    font-size: 2.5rem; /* Adjust font size as needed */
+    text-shadow: 2px 2px 5px rgba(0, 0, 0, 0.2); /* Add a soft shadow */
+    margin-top: 20px;
+}
