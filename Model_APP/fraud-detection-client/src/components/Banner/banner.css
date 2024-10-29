@@ -1,0 +1,62 @@
+/* banner.css */
+
+/* Reset margins and paddings */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+html, body {
+    width: 100%;
+    height: 100%;
+}
+
+/* Banner styles */
+.banner {
+    position: relative; /* This can be adjusted based on your layout */
+    width: 100%;
+    height: 100vh; /* Full viewport height */
+    display: flex; /* Flexbox for alignment */
+    align-items: center; /* Center items vertically */
+    justify-content: center; /* Center items horizontally */
+}
+
+/* Banner item styles */
+.banner-item {
+    flex: 1; /* Each item takes equal space */
+    display: flex;
+    align-items: center; /* Center text vertically */
+    justify-content: center; /* Center text horizontally */
+    color: white; /* Example text color */
+}
+
+/* Specific styles for each banner item */
+.banner-item-02 {
+    background-color: #232323; /* Example background color */
+}
+
+.banner-item-03 {
+    background-color: #444444; /* Example background color */
+}
+
+/* Text content styles */
+.text-content {
+    text-align: center; /* Center text */
+}
+
+/* Heading styles */
+h4 {
+    margin-bottom: 10px; /* Space below h4 */
+}
+
+h2 {
+    font-size: 2em; /* Example font size */
+}
+
+/* Responsive Styles */
+@media (max-width: 768px) {
+    .banner {
+        flex-direction: column; /* Stack items on smaller screens */
+    }
+}

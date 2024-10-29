@@ -1,0 +1,103 @@
+/* Global Styles */
+body {
+    font-family: Arial, sans-serif;
+    background-color: #f4f4f4;
+    margin: 0;
+    padding: 20px;
+    min-height: 150vh; /* Use min-height for a responsive full height */
+}
+
+/* Heading Styles */
+h2 {
+    text-align: center;
+    margin: 20px 0;
+    color: #333;
+}
+
+/* Form Container Styles */
+.form-container {
+    background: rgb(109, 98, 98);
+    padding: 20px;
+    border-radius: 8px;
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+    max-width: 600px;
+    margin: 20px auto; /* Add margin for spacing */
+    overflow-y: auto; /* Enable scrolling for long forms */
+}
+
+/* Form Styles */
+form {
+    display: flex;
+    flex-wrap: wrap;
+}
+
+/* Form Group Styles */
+.form-group {
+    flex: 1 1 45%;
+    margin: 10px;
+    box-sizing: border-box;
+    color: black;
+}
+
+/* Input and Select Styles */
+input,
+select {
+    width: 100%;
+    padding: 10px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    transition: border-color 0.3s ease;
+}
+
+/* Input and Select Focus Styles */
+input:focus,
+select:focus {
+    border-color: #007BFF;
+    outline: none;
+}
+
+/* Button Styles */
+button {
+    width: 100%;
+    padding: 10px;
+    background-color: #007BFF;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    font-size: 16px;
+    cursor: pointer;
+    transition: background-color 0.3s ease;
+    margin-top: 20px; /* Additional spacing at top */
+    margin-bottom: 60px; /* Keeps space below button */
+}
+
+/* Button Hover Styles */
+button:hover {
+    background-color: #0056b3;
+}
+
+/* Result Heading Styles */
+h3 {
+    text-align: center;
+    color: #333;
+    margin-top: 20px; /* Space between form and result */
+}
+
+/* Adjustments for Full Height */
+html, body {
+    height: 100%; /* Use 100% height for full-page content */
+    overflow-y: auto;
+    margin: 0;
+}
+
+/* Adjust form container height */
+.form-container {
+    max-height: 85vh; /* Limit form height to improve scrolling */
+    margin: 20px auto; /* Center the form */
+}
+
+/* Background Image Adjustments */
+.background-image h2 {
+    color: white;
+    margin-top: 30px;
+}
