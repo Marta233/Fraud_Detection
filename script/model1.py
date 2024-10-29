@@ -19,10 +19,11 @@ from imblearn.combine import SMOTETomek
 import os
 import time
 class KerasClassifierWrapper(BaseEstimator, ClassifierMixin):
-    def init(self, build_fn=None, **kwargs):
+    def __init__(self, build_fn=None, **kwargs):  # Corrected here
         self.build_fn = build_fn
         self.kwargs = kwargs
         self.model = None
+
     def fit(self, X, y):
         self.model = self.build_fn(**self.kwargs)
         self.model.fit(X, y, epochs=self.kwargs.get('epochs', 10), batch_size=self.kwargs.get('batch_size', 32))
@@ -34,7 +35,7 @@ class KerasClassifierWrapper(BaseEstimator, ClassifierMixin):
     def predict_proba(self, X):
         return self.model.predict(X)
 class FraudModel:
-    def init(self, df, dataset_name, source):
+    def __init__(self, df, dataset_name, source):
         self.df = df
         self.dataset_name = dataset_name
         self.source = source
@@ -228,6 +229,7 @@ class FraudModel:
 
     def model_lstm(self):
         start_time = time.time()
+        lstm_pipeline = None  # Initialize lstm_pipeline
         try:
             with mlflow.start_run(run_name=f"{self.dataset_name} - LSTM", nested=True):
                 X_train_res, y_train_res, X_test, y_test = self.apply_smote()
@@ -237,15 +239,13 @@ class FraudModel:
                 # Create the LSTM model building function
                 def create_lstm_model():
                     model = Sequential()
-                    model.add(LSTM(50, activation='relu', input_shape=(X_train_res.shape[1], 1)))  # Fixed hidden units
+                    model.add(LSTM(50, activation='relu', input_shape=(X_train_res.shape[1], 1)))
                     model.add(Dropout(0.2))
                     model.add(Dense(1, activation='sigmoid'))
                     model.compile(optimizer='adam', loss='binary_crossentropy', metrics=['accuracy'])
                     return model
-
-                # Initialize the LSTM model with the custom wrapper
                 lstm_pipeline = Pipeline([
-                    ('lstm_classifier', KerasClassifierWrapper(build_fn=create_lstm_model))
+                    ('lstm_classifier', KerasClassifierWrapper(build_fn=create_lstm_model, epochs=10, batch_size=32))  # Pass arguments here
                 ])
 
                 # Fit the model directly
@@ -255,7 +255,7 @@ class FraudModel:
                 y_pred = lstm_pipeline.predict(X_test)
 
                 # Log metrics and duration
-                hyperparameters = {'hidden_units': 10, 'batch_size': 32, 'epochs': 50}  # Fixed hyperparameters
+                hyperparameters = {'hidden_units': 50, 'batch_size': 32, 'epochs': 50}
                 duration = time.time() - start_time
                 self.log_metrics("LSTM", X_train_res, y_train_res, y_test, y_pred.flatten(), hyperparameters, duration)
 
@@ -269,7 +269,7 @@ class FraudModel:
         else:
             mlflow.end_run(status="FINISHED")
         
-        return lstm_pipeline
+        return lstm_pipeline  # This will return None if an error occurred
 
     def display_metrics_table(self):
         return self.metrics_df
