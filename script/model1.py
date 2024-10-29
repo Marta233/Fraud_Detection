@@ -2,60 +2,81 @@ import pandas as pd
 import numpy as np
 import mlflow
 import mlflow.sklearn
+import mlflow.tensorflow
 import plotly.express as px
 from imblearn.over_sampling import SMOTE
-from sklearn.model_selection import train_test_split 
-from sklearn.linear_model import LogisticRegression 
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, roc_auc_score, classification_report
+from sklearn.pipeline import Pipeline
+from sklearn.ensemble import RandomForestClassifier
 from sklearn.tree import DecisionTreeClassifier
-from tensorflow.keras.preprocessing.sequence import TimeseriesGenerator
-from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier
-from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, roc_auc_score
-import time  # Importing time module for duration calculation
+from sklearn.neural_network import MLPClassifier
 from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers import Dense
-import tensorflow as tf
-from tensorflow.keras.layers import Dense, LSTM, SimpleRNN
-from tensorflow.keras.optimizers import Adam
+from tensorflow.keras.layers import LSTM, Dense, Dropout
+import joblib
+from sklearn.base import BaseEstimator, ClassifierMixin
+from imblearn.combine import SMOTETomek
+import os
 import time
-from sklearn.metrics import accuracy_score
+class KerasClassifierWrapper(BaseEstimator, ClassifierMixin):
+    def __init__(self, build_fn=None, **kwargs):  # Corrected here
+        self.build_fn = build_fn
+        self.kwargs = kwargs
+        self.model = None
 
+    def fit(self, X, y):
+        self.model = self.build_fn(**self.kwargs)
+        self.model.fit(X, y, epochs=self.kwargs.get('epochs', 10), batch_size=self.kwargs.get('batch_size', 32))
+        return self
+
+    def predict(self, X):
+        return (self.model.predict(X) > 0.5).astype("int32")
+
+    def predict_proba(self, X):
+        return self.model.predict(X)
 class FraudModel:
-    def __init__(self, df: pd.DataFrame, dataset_name: str, source: str):
+    def __init__(self, df, dataset_name, source):
         self.df = df
         self.dataset_name = dataset_name
         self.source = source
         self.metrics_df = pd.DataFrame(columns=["Model", "Accuracy", "Precision", "Recall", "F1 Score", "AUC"])
         mlflow.sklearn.autolog()
-
+        mlflow.tensorflow.autolog()
     def fraud_preprocess(self):
         columns_to_convert = ['category_Ads', 'category_Direct', 'category_SEO', 'category_Chrome', 
-                              'category_FireFox', 'category_IE', 'category_Opera', 'category_Safari', 
-                              'category_F', 'category_M']
+                            'category_FireFox', 'category_IE', 'category_Opera', 'category_Safari', 
+                            'category_F', 'category_M']
         self.df[columns_to_convert] = self.df[columns_to_convert].astype(int)
         self.df = self.df.drop(columns=['user_id', 'country'], axis=1)
         return self.df
 
-    def apply_smote(self):
+    def apply_smote(self, minority_percentage=0.5):
         X = self.df.drop('class', axis=1)
         y = self.df['class']
         X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42, stratify=y)
-        smote = SMOTE(random_state=42)
-        X_train_res, y_train_res = smote.fit_resample(X_train, y_train)
+
+        if X_train.isnull().any().any() or y_train.isnull().any():
+            raise ValueError("Input data contains missing values. Please handle them before applying SMOTE.")
+
+        majority_class_count = np.sum(y_train == 0)
+        desired_minority_count = int(minority_percentage * majority_class_count)
+        smote_tomek = SMOTETomek(sampling_strategy={1: desired_minority_count}, random_state=42)
+        X_train_res, y_train_res = smote_tomek.fit_resample(X_train, y_train)
+
+        print("New class distribution in training set:", np.bincount(y_train_res))
         return X_train_res, y_train_res, X_test, y_test
 
     def evaluate_model(self, y_true, y_pred):
         accuracy = accuracy_score(y_true, y_pred)
-        precision = precision_score(y_true, y_pred)
-        recall = recall_score(y_true, y_pred)
-        f1 = f1_score(y_true, y_pred)
+        precision = precision_score(y_true, y_pred, average='weighted')
+        recall = recall_score(y_true, y_pred, average='weighted')
+        f1 = f1_score(y_true, y_pred, average='weighted')
         auc = roc_auc_score(y_true, y_pred)
-        return accuracy, precision, recall, f1, auc
+        class_report = classification_report(y_true, y_pred, output_dict=True)
+        return accuracy, precision, recall, f1, auc, class_report
 
     def log_metrics(self, model_name, X_train_res, y_train_res, y_test, y_pred, hyperparameters=None, duration=None):
-        # Evaluate model
-        accuracy, precision, recall, f1, auc = self.evaluate_model(y_test, y_pred)
-
-        # Append the metrics to the metrics_df
+        accuracy, precision, recall, f1, auc, class_report = self.evaluate_model(y_test, y_pred)
         new_row = pd.DataFrame({
             "Model": [model_name],
             "Accuracy": [accuracy],
@@ -68,24 +89,17 @@ class FraudModel:
 
         print(f"Logging metrics for model: {model_name}")
         print(f"Dataset name: {self.dataset_name}, Source: {self.source}")
+        print("\nClassification Report:\n", class_report)
 
         mlflow.log_param("dataset_name", self.dataset_name)
         mlflow.log_param("source", self.source)
         mlflow.log_param("model_name", model_name)
         mlflow.log_param("duration", duration)
-        
-        # # Adding input example for model logging
-        # input_example = X_train_res[:1]  # Use first row of training data as example input
 
-        # Log the model with input example
-        mlflow.sklearn.log_model(model_name, f"{model_name.lower()}_model")
-
-        # Log hyperparameters if provided
         if hyperparameters:
             for key, value in hyperparameters.items():
                 mlflow.log_param(key, value)
 
-        # Log metrics
         mlflow.log_metric("accuracy", accuracy)
         mlflow.log_metric("precision", precision)
         mlflow.log_metric("recall", recall)
@@ -93,284 +107,169 @@ class FraudModel:
         mlflow.log_metric("auc", auc)
         mlflow.log_param("train_size", len(y_train_res))
         mlflow.log_param("feature_count", X_train_res.shape[1])
-    def model_logistic_regression(self):
-        start_time = time.time()  # Start time for duration calculation
-        with mlflow.start_run(run_name=f"{self.dataset_name} - Logistic Regression", nested=True):
-            X_train_res, y_train_res, X_test, y_test = self.apply_smote()
-            model = LogisticRegression()
-            model.fit(X_train_res, y_train_res)
-            y_pred = model.predict(X_test)
-            hyperparameters = {"C": model.C, "solver": model.solver}
-            duration = time.time() - start_time  # Calculate duration
-            # Evaluating the model
-            accuracy = model.score(X_test, y_test)
-            print(f"Accuracy: {accuracy:.2f}")
-            self.log_metrics("Logistic Regression",  X_train_res, y_train_res, y_test, y_pred, hyperparameters, duration)
-            return model
+
+    def save_model(self, model, model_name):
+        print(f"Attempting to save model of type: {type(model)}")
+        """Save model locally and log it with MLflow."""
+        model_dir = 'models'  # Adjust if necessary
+        os.makedirs(model_dir, exist_ok=True)  # Create directory if it doesn't exist
+        model_path = os.path.join(model_dir, f"{model_name}.pkl")
+
+        try:
+            # For sklearn models
+            if isinstance(model, (DecisionTreeClassifier, RandomForestClassifier, MLPClassifier)):
+                joblib.dump(model, model_path)  # Save locally
+                print(f"Model {model_name} saved at {model_path}")
+                mlflow.sklearn.log_model(model, model_name)  # Log to MLflow
+            # For Keras models
+            elif isinstance(model, Sequential):
+                model.save(os.path.join(model_dir, f"{model_name}.h5"))  # Save locally
+                print(f"Keras model {model_name} saved at {model_path}.h5")
+                mlflow.tensorflow.log_model(model, model_name)  # Log to MLflow
+            else:
+                print("Model type not recognized for saving.")
+        except Exception as e:
+            print(f"Error saving model: {e}")
+    def display_metrics(self):
+        print("\nEvaluation Metrics:")
+        print(self.metrics_df)
+
     def model_decision_tree(self):
         start_time = time.time()
         with mlflow.start_run(run_name=f"{self.dataset_name} - Decision Tree", nested=True):
             X_train_res, y_train_res, X_test, y_test = self.apply_smote()
-            model = DecisionTreeClassifier()
-            model.fit(X_train_res, y_train_res)
-            y_pred = model.predict(X_test)
-            hyperparameters = {"max_depth": model.max_depth, "min_samples_split": model.min_samples_split}
+            # Initialize the model without hyperparameter tuning
+            pipeline = Pipeline([
+                ('decision_tree', DecisionTreeClassifier())  # Default parameters
+            ])
+            # Fit the model directly
+            pipeline.fit(X_train_res, y_train_res)
+            # Make predictions
+            y_pred = pipeline.predict(X_test)
+            # Log metrics and duration
             duration = time.time() - start_time
-            # Evaluating the model
-            accuracy = model.score(X_test, y_test)
-            print(f"Accuracy: {accuracy:.2f}")
-            self.log_metrics("Decision Tree", X_train_res, y_train_res, y_test, y_pred, hyperparameters, duration)
-            return model
+            self.log_metrics("Decision Tree", X_train_res, y_train_res, y_test, y_pred, {}, duration)
+            # Attempt to save the model
+            print("Attempting to save the model...")
+            self.save_model(pipeline.named_steps['decision_tree'], f"{self.dataset_name}_Decision_Tree")
+            print("Model save attempted.")
+            print("\nClassification Report for Decision Tree:\n", classification_report(y_test, y_pred))
+            return pipeline
+
     def model_random_forest(self):
         start_time = time.time()
-        with mlflow.start_run(run_name=f"{self.dataset_name} - Random Forest", nested=True):
-            X_train_res, y_train_res, X_test, y_test = self.apply_smote()
-            model = RandomForestClassifier(n_estimators=100)
-            model.fit(X_train_res, y_train_res)
-            y_pred = model.predict(X_test)
-            hyperparameters = {"n_estimators": 50, "max_depth": model.max_depth}
-            duration = time.time() - start_time
-            # Evaluating the model
-            accuracy = model.score(X_test, y_test)
-            print(f"Accuracy: {accuracy:.2f}")
-            self.log_metrics("Random Forest",  X_train_res, y_train_res, y_test, y_pred, hyperparameters, duration)
-            return model
+        try:
+            with mlflow.start_run(run_name=f"{self.dataset_name} - Random Forest", nested=True):
+                X_train_res, y_train_res, X_test, y_test = self.apply_smote()
+                
+                # Initialize the model with default parameters
+                pipeline = Pipeline([
+                    ('random_forest', RandomForestClassifier(random_state=42, n_estimators=50))  # Default parameters
+                ])
+                
+                # Fit the model directly
+                pipeline.fit(X_train_res, y_train_res)
 
-    def model_gradient_boosting(self):
-        start_time = time.time()
-        with mlflow.start_run(run_name=f"{self.dataset_name} - Gradient Boosting", nested=True):
-            X_train_res, y_train_res, X_test, y_test = self.apply_smote()
-            model = GradientBoostingClassifier()
-            model.fit(X_train_res, y_train_res)
-            y_pred = model.predict(X_test)
-            hyperparameters = {"n_estimators": model.n_estimators, "learning_rate": model.learning_rate}
-            duration = time.time() - start_time
-            # Evaluating the model
-            accuracy = model.score(X_test, y_test)
-            print(f"Accuracy: {accuracy:.2f}")
-            self.log_metrics("Gradient Boosting", X_train_res, y_train_res,  y_test, y_pred, hyperparameters, duration)
-            return model
-    # Function for logging deep learning model parameters and metrics
-    def log_deep_learning_params(self, model_name, model, epochs, batch_size, X_train_res, y_train_res, y_test, y_pred, duration):
-        # Log model structure and hyperparameters
-        mlflow.log_param("model_name", model_name)
-        mlflow.log_param("epochs", epochs)
-        mlflow.log_param("batch_size", batch_size)
-        mlflow.log_param("layers", len(model.layers))
-        
-        for i, layer in enumerate(model.layers):
-            mlflow.log_param(f"layer_{i}_type", layer.__class__.__name__)
-            mlflow.log_param(f"layer_{i}_units", getattr(layer, "units", "N/A"))
-            mlflow.log_param(f"layer_{i}_activation", getattr(layer, "activation", "N/A"))
+                # Make predictions
+                y_pred = pipeline.predict(X_test)
 
-        # Log optimizer settings
-        optimizer = model.optimizer
-        mlflow.log_param("optimizer", optimizer.__class__.__name__)  # Change to this line
-        mlflow.log_param("learning_rate", optimizer.learning_rate.numpy())
-
-        # Log metrics
-        self.log_metrics(model_name, X_train_res, y_train_res, y_test, y_pred, None, duration)
-
-        # # Log the Keras model with an input example
-        # input_example = np.array(X_train_res[:1])  # Use the first example of the training set
-        mlflow.keras.log_model(model, f"{model_name}_model")
-
-
+                # Log metrics and duration
+                hyperparameters = {}  # No hyperparameters to log
+                duration = time.time() - start_time
+                self.log_metrics("Random Forest", X_train_res, y_train_res, y_test, y_pred, hyperparameters, duration)
+                # Save the actual model from the pipeline
+                random_forest_model = pipeline.named_steps['random_forest']
+                print("Attempting to save random forest model...")
+                self.save_model(random_forest_model, f"{self.dataset_name}_Random_Forest")
+                print("Model save attempted.")
+                print("\nClassification Report for Random Forest:\n", classification_report(y_test, y_pred))
+        except Exception as e:
+            print(f"An error occurred: {e}")
+            mlflow.end_run(status="FAILED")
+        else:
+            mlflow.end_run(status="FINISHED")
 
     def model_mlp(self):
         start_time = time.time()
         try:
             with mlflow.start_run(run_name=f"{self.dataset_name} - MLP", nested=True):
                 X_train_res, y_train_res, X_test, y_test = self.apply_smote()
-
-                # MLP model setup
-                model = Sequential([
-                    Dense(64, activation='relu', input_dim=X_train_res.shape[1]),
-                    Dense(32, activation='relu'),
-                    Dense(1, activation='sigmoid')  # Binary classification
+                
+                # Initialize the MLP model with default parameters
+                mlp_pipeline = Pipeline([
+                    ('mlp', MLPClassifier(max_iter=1000, random_state=42))  # Default parameters
                 ])
-                model.compile(optimizer=Adam(learning_rate=0.001), loss='binary_crossentropy', metrics=['accuracy'])
+                
+                # Fit the model directly
+                mlp_pipeline.fit(X_train_res, y_train_res)
 
-                # Model training
-                epochs = 10
-                batch_size = 32
-                model.fit(X_train_res, y_train_res, epochs=epochs, batch_size=batch_size, verbose=1)
+                # Make predictions
+                y_pred_probs = mlp_pipeline.predict_proba(X_test)[:, 1]  # Use predict_proba
+                y_pred = (y_pred_probs > 0.5).astype(int)
 
-                # Prediction
-                y_pred = (model.predict(X_test) > 0.5).astype("int32")
+                # Log metrics and duration
+                hyperparameters = {}  # No hyperparameters to log
                 duration = time.time() - start_time
-                # Evaluating the model
-                accuracy = model.score(X_test, y_test)
-                print(f"Accuracy: {accuracy:.2f}")
-                # Log deep learning parameters and metrics
-                self.log_deep_learning_params("MLP", model, epochs, batch_size, X_train_res, y_train_res, y_test, y_pred, duration)
+                self.log_metrics("MLP", X_train_res, y_train_res, y_test, y_pred, hyperparameters, duration)
 
-                # Log the Keras model to MLflow
-                mlflow.keras.log_model(model, "MLP_model")
+                # Save the actual MLP model from the pipeline
+                mlp_model = mlp_pipeline.named_steps['mlp']
+                print("Attempting to save MLP model...")
+                self.save_model(mlp_model, f"{self.dataset_name}_MLP")
+                print("Model save attempted.")
 
+                print("\nClassification Report for MLP:\n", classification_report(y_test, y_pred))
         except Exception as e:
             print(f"An error occurred: {e}")
-            mlflow.end_run(status="FAILED")  # End the run as failed if an exception occurs
+            mlflow.end_run(status="FAILED")
         else:
-            mlflow.end_run(status="FINISHED")  # End the run as finished if successful
-
-        return model
-    def apply_smote11(self, X, y):
-        # Reshape X for SMOTE (flattening the time-series data)
-        n_samples, n_time_steps, n_features = X.shape
-        X_reshaped = X.reshape(n_samples, n_time_steps * n_features)
-
-        smote = SMOTE(random_state=42)
-        X_resampled, y_resampled = smote.fit_resample(X_reshaped, y)
-
-        # Reshape back to the original time-series format
-        n_resampled_samples = X_resampled.shape[0]
-        X_resampled = X_resampled.reshape(n_resampled_samples, n_time_steps, n_features)
-
-        return X_resampled, y_resampled
-
-    def fraud_preprocess_lstm_rnn(self, sequence_length=10):
-        X = self.df.drop('class', axis=1).values
-        y = self.df['class'].values
-
-        assert len(X) == len(y), "Mismatch in number of samples between X and y"
-
-        # Split the data first
-        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42, stratify=y)
-
-        # Calculate the number of samples we can create with the given sequence length
-        n_samples = len(X_train) // sequence_length
-        if n_samples < 1:
-            raise ValueError("Sequence length must be less than the number of training samples.")
-
-        # Reshape X_train for LSTM
-        X_train = X_train[:n_samples * sequence_length].reshape(-1, sequence_length, X_train.shape[1])  # (n_samples, sequence_length, n_features)
+            mlflow.end_run(status="FINISHED")
         
-        # Ensure y_train has the correct shape
-        y_train = y_train[:n_samples * sequence_length].reshape(-1, sequence_length)[:, -1]  # Last value as label
+        return mlp_pipeline
 
-        # Apply SMOTE
-        X_train_res, y_train_res = self.apply_smote11(X_train, y_train)
-
-        # Create generators
-        train_generator = TimeseriesGenerator(X_train_res, y_train_res, length=sequence_length, batch_size=32)
-        test_generator = TimeseriesGenerator(X_test, y_test, length=sequence_length, batch_size=32)
-
-        return train_generator, test_generator, y_test
     def model_lstm(self):
         start_time = time.time()
-        model = None  # Initialize model variable to handle UnboundLocalError
+        lstm_pipeline = None  # Initialize lstm_pipeline
         try:
             with mlflow.start_run(run_name=f"{self.dataset_name} - LSTM", nested=True):
-                # Apply SMOTE to handle class imbalance
                 X_train_res, y_train_res, X_test, y_test = self.apply_smote()
-                
-                # Convert DataFrames to NumPy arrays if necessary and reshape input for LSTM
-                X_train_res = np.array(X_train_res)
-                X_test = np.array(X_test)
-                
-                # Reshape input for LSTM: (samples, time steps, features)
-                X_train_res = X_train_res.reshape((X_train_res.shape[0], 1, X_train_res.shape[1]))
-                X_test = X_test.reshape((X_test.shape[0], 1, X_test.shape[1]))
+                X_train_res = X_train_res.values.reshape((X_train_res.shape[0], X_train_res.shape[1], 1))
+                X_test = X_test.values.reshape((X_test.shape[0], X_test.shape[1], 1))
 
-                # LSTM model setup
-                model = Sequential([
-                    LSTM(64, activation='relu', input_shape=(X_train_res.shape[1], X_train_res.shape[2])),  # Input shape
-                    Dense(32, activation='relu'),  # Hidden layer
-                    Dense(1, activation='sigmoid')  # Output layer for binary classification
+                # Create the LSTM model building function
+                def create_lstm_model():
+                    model = Sequential()
+                    model.add(LSTM(50, activation='relu', input_shape=(X_train_res.shape[1], 1)))
+                    model.add(Dropout(0.2))
+                    model.add(Dense(1, activation='sigmoid'))
+                    model.compile(optimizer='adam', loss='binary_crossentropy', metrics=['accuracy'])
+                    return model
+                lstm_pipeline = Pipeline([
+                    ('lstm_classifier', KerasClassifierWrapper(build_fn=create_lstm_model, epochs=10, batch_size=32))  # Pass arguments here
                 ])
-                model.compile(optimizer=Adam(learning_rate=0.001), 
-                            loss='binary_crossentropy', 
-                            metrics=['accuracy'])
 
-                # Model training
-                epochs = 10
-                batch_size = 32
-                model.fit(X_train_res, y_train_res, epochs=epochs, batch_size=batch_size, verbose=1)
+                # Fit the model directly
+                lstm_pipeline.fit(X_train_res, y_train_res)
 
-                # Prediction
-                y_pred = (model.predict(X_test) > 0.5).astype("int32")
+                # Make predictions
+                y_pred = lstm_pipeline.predict(X_test)
 
-                # Evaluating the model
-                accuracy = accuracy_score(y_test, y_pred)
+                # Log metrics and duration
+                hyperparameters = {'hidden_units': 50, 'batch_size': 32, 'epochs': 50}
                 duration = time.time() - start_time
-                
-                print(f"Accuracy: {accuracy:.2f}")
-                
-                # Log deep learning parameters and metrics
-                self.log_deep_learning_params(
-                    "LSTM", model, epochs, batch_size, X_train_res, y_train_res, y_test, y_pred, duration
-                )
+                self.log_metrics("LSTM", X_train_res, y_train_res, y_test, y_pred.flatten(), hyperparameters, duration)
 
-                # Log the Keras model to MLflow
-                mlflow.keras.log_model(model, "LSTM_model")
-
+                # Save the entire pipeline
+                print("Attempting to save LSTM model pipeline...")
+                self.save_model(lstm_pipeline, f"{self.dataset_name}_LSTM_Pipeline")
+                print("Model save attempted.")
         except Exception as e:
             print(f"An error occurred: {e}")
-            mlflow.end_run(status="FAILED")  # End the run as failed if an exception occurs
+            mlflow.end_run(status="FAILED")
         else:
-            mlflow.end_run(status="FINISHED")  # End the run as finished if successful
+            mlflow.end_run(status="FINISHED")
+        
+        return lstm_pipeline  # This will return None if an error occurred
 
-        return model
-    def model_rnn(self):
-        start_time = time.time()
-        model = None  # Initialize model variable to handle UnboundLocalError
-        try:
-            with mlflow.start_run(run_name=f"{self.dataset_name} - RNN", nested=True):
-                # Apply SMOTE to handle class imbalance
-                X_train_res, y_train_res, X_test, y_test = self.apply_smote()
-                
-                # Convert DataFrames to NumPy arrays if necessary and reshape input for RNN
-                X_train_res = np.array(X_train_res)
-                X_test = np.array(X_test)
-                
-                # Reshape input for RNN: (samples, time steps, features)
-                X_train_res = X_train_res.reshape((X_train_res.shape[0], 1, X_train_res.shape[1]))
-                X_test = X_test.reshape((X_test.shape[0], 1, X_test.shape[1]))
-
-                # RNN model setup
-                model = Sequential([
-                    SimpleRNN(64, activation='relu', input_shape=(X_train_res.shape[1], X_train_res.shape[2])),  # Input shape
-                    Dense(32, activation='relu'),  # Hidden layer
-                    Dense(1, activation='sigmoid')  # Output layer for binary classification
-                ])
-                model.compile(optimizer=Adam(learning_rate=0.001), 
-                            loss='binary_crossentropy', 
-                            metrics=['accuracy'])
-
-                # Model training
-                epochs = 10
-                batch_size = 32
-                model.fit(X_train_res, y_train_res, epochs=epochs, batch_size=batch_size, verbose=1)
-
-                # Prediction
-                y_pred = (model.predict(X_test) > 0.5).astype("int32")
-
-                # Evaluating the model
-                accuracy = accuracy_score(y_test, y_pred)
-                duration = time.time() - start_time
-                
-                print(f"Accuracy: {accuracy:.2f}")
-                
-                # Log deep learning parameters and metrics
-                self.log_deep_learning_params(
-                    "RNN", model, epochs, batch_size, X_train_res, y_train_res, y_test, y_pred, duration
-                )
-
-                # Log the Keras model to MLflow
-                mlflow.keras.log_model(model, "RNN_model")
-
-        except Exception as e:
-            print(f"An error occurred: {e}")
-            mlflow.end_run(status="FAILED")  # End the run as failed if an exception occurs
-        else:
-            mlflow.end_run(status="FINISHED")  # End the run as finished if successful
-
-        return model
     def display_metrics_table(self):
         return self.metrics_df
-
-
-
-
-
