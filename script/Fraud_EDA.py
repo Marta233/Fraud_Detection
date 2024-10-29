@@ -242,11 +242,8 @@ class FRAUD_EDA:
         # Extract day of the week from 'purchase_time' (Monday=0, Sunday=6)
         self.merged_data['purchase_day_of_week'] = self.merged_data['purchase_time'].dt.dayofweek
 
-        self.merged_data['signup_hour'] = self.merged_data['signup_time'].dt.hour
-        self.merged_data['signup_day'] = self.merged_data['signup_time'].dt.day
-        self.merged_data['signup_month'] = self.merged_data['signup_time'].dt.month
-        self.merged_data['purchase_day'] = self.merged_data['purchase_time'].dt.day
-        self.merged_data['purchase_month'] = self.merged_data['purchase_time'].dt.month
+        self.merged_data['signup_day_of_week'] = self.merged_data['signup_time'].dt.hour
+        self.merged_data['purchase_hour'] = self.merged_data['purchase_time'].dt.day
         self.merged_data['purchase__hour'] = self.merged_data['purchase_time'].dt.hour
         
     
@@ -285,7 +282,7 @@ class FRAUD_EDA:
 
         # Initialize the OneHotEncoder
         # Convert 'income_category' to dummy variables
-        self.merged_data = pd.get_dummies(self.merged_data, columns=categorical_features, prefix='category', drop_first=False)
+        self.merged_data = pd.get_dummies(self.merged_data, columns=categorical_features, prefix='category', drop_first=True)
         # Display the resulting DataFrame
         self.merged_data
         return self.merged_data
