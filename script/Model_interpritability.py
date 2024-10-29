@@ -1,91 +1,110 @@
+import sys
 import numpy as np
 import pandas as pd
 import shap
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import accuracy_score, classification_report
+from sklearn.ensemble import RandomForestClassifier
 from lime.lime_tabular import LimeTabularExplainer
-import joblib  # For loading scikit-learn models
 import matplotlib.pyplot as plt
+from imblearn.combine import SMOTETomek  # Correct import for SMOTETomek
 import logging
-import mlflow  # Import MLflow for logging control
+# Set up logging configuration
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+class FraudDetectionModel:
+    def __init__(self, data_path):
+        # Load data
+        logging.info("Loading data from %s", data_path)
+        self.data = pd.read_csv(data_path, index_col=0)
+        self.data = self.data.drop(columns=['country'])
+        
+        # Prepare features and target
+        self.X = self.data.drop(columns=['class'])
+        self.y = self.data['class']
+        
+        # Split the data into training and test sets
+        self.X_train, self.X_test, self.y_train, self.y_test = train_test_split(
+            self.X, self.y, test_size=0.2, random_state=42
+        )
+        
+        # Initialize model
+        self.model = RandomForestClassifier(random_state=42)
+        logging.info("Initialized RandomForestClassifier model.")
 
-# Set the logging level for MLflow to suppress info messages
-mlflow_logger = logging.getLogger("mlflow")
-mlflow_logger.setLevel(logging.WARNING)
+    def apply_smote(self):
+        """Apply SMOTETomek to balance the dataset."""
+        logging.info("Applying SMOTETomek to balance the dataset...")
+        smote_tomek = SMOTETomek(random_state=42)
+        self.X_train_resampled, self.y_train_resampled = smote_tomek.fit_resample(self.X_train, self.y_train)
+        logging.info(f"Original training set size: {self.X_train.shape[0]} | Resampled training set size: {self.X_train_resampled.shape[0]}")
 
-class ModelTrainer:
-    def __init__(self, df):
-        """
-        Initialize the ModelTrainer with a DataFrame.
+    def train_model(self):
+        """Train the Random Forest model on training data."""
+        logging.info("Training the model...")
+        self.model.fit(self.X_train_resampled, self.y_train_resampled)
+        logging.info("Model trained successfully.")
 
-        Args:
-        - df: pandas DataFrame containing features and target variable.
-        """
-        self.df = df
-        self.model = None
+    def evaluate_model(self):
+        """Evaluate the model and print accuracy and classification report."""
+        y_pred = self.model.predict(self.X_test)
+        accuracy = accuracy_score(self.y_test, y_pred)
+        logging.info("Accuracy: %f", accuracy)
+        logging.info("\nClassification Report:\n%s", classification_report(self.y_test, y_pred))
 
-    def load_model(self, model_name, model_path):
-        self.model = joblib.load(model_path)
-        print(f"Model {model_name} loaded successfully.")
+    def explain_with_shap(self, sample_size=100):
+        """Explain predictions using SHAP."""
+        logging.info("Explaining predictions using SHAP...")
+        # Sample the test set
+        X_test_sample = self.X_test.sample(sample_size, random_state=42)
 
-    def explain_with_lime(self, X_train, X_test):
+        # Create SHAP explainer
+        explainer = shap.Explainer(self.model, self.X_train_resampled)  # Use resampled training data
+        shap_values = explainer(X_test_sample, check_additivity=False)
+
+        # Generate summary plot
+        self.shap_summary_plot(shap_values, X_test_sample)
+
+        # Generate force plot for the first instance
+        self.shap_force_plot(shap_values, explainer, index=0, X_test_sample=X_test_sample)
+
+    def shap_summary_plot(self, shap_values, X_test_sample):
+        """Create a SHAP summary plot."""
+        logging.info("Creating SHAP Summary Plot...")
+        shap.summary_plot(shap_values[..., 1], X_test_sample)  # For fraud class
+
+    def shap_force_plot(self, shap_values, explainer, index=0, X_test_sample=None):
+        """Create a SHAP force plot for a specific instance."""
+        if X_test_sample is not None:
+            shap.initjs()
+            plt.figure()
+            shap.force_plot(
+                explainer.expected_value[1],
+                shap_values.values[index, :, 1],
+                X_test_sample.iloc[index],
+                matplotlib=True
+            )
+            plt.show()
+        else:
+            logging.error("X_test_sample must be provided for the force plot.")
+
+    def explain_with_lime(self):
         """Explain predictions using LIME."""
-        # Create LIME Explainer
+        logging.info("Explaining predictions using LIME...")
+        # Create LIME explainer
         explainer = LimeTabularExplainer(
-            training_data=np.array(X_train),
+            training_data=np.array(self.X_train_resampled),
             mode='classification',
-            feature_names=X_train.columns,
+            feature_names=self.X_train.columns,
             class_names=['0', '1']
         )
-        # Check if X_test is a DataFrame
-        if isinstance(X_test, pd.DataFrame):
-            # Get the first instance as a 1D array
-            instance = X_test.iloc[0].to_numpy()  # This should now work correctly
-        else:
-            raise ValueError("X_test should be a pandas DataFrame.")
 
+        # Get the first instance from the test set
+        instance = self.X_test.iloc[0].to_numpy()
+        
         # Generate explanation
         exp = explainer.explain_instance(instance, self.model.predict_proba, num_features=30)
-
+        
         # Plot local explanation
         plt = exp.as_pyplot_figure()
         plt.tight_layout()
         exp.show_in_notebook(show_table=True)
-    def explain_with_shap(self, X_train_res, sample_size=100):
-        """Create a SHAP explainer using a sample of the training data."""
-        if sample_size is not None:
-            # Sample the training data if sample_size is provided
-            X_train_res = X_train_res.sample(n=min(sample_size, len(X_train_res)), random_state=42)
-
-        self.explainer = shap.KernelExplainer(self.model.predict_proba, X_train_res)
-        print("SHAP explainer created.")
-    def calculate_shap_values(self, X_test, sample_size=100):
-        """Calculate SHAP values for the test set with optional sampling."""
-        if not hasattr(self, 'explainer'):
-            raise ValueError("SHAP explainer not created. Call explain_with_shap first.")
-        
-        # Sample the test set if sample_size is provided
-        if sample_size is not None:
-            sample_size = min(sample_size, len(X_test))  # Ensure we don't sample more than available
-            sampled_indices = np.random.choice(X_test.index, size=sample_size, replace=False)
-            X_test_sampled = X_test.loc[sampled_indices]
-
-        # Calculate SHAP values
-        shap_values = self.explainer.shap_values(X_test_sampled)
-        
-        print("SHAP values calculated.")
-        return shap_values, sampled_indices
-
-    def plot_shap_summary(self, shap_values, X_test):
-        """Plot summary of SHAP values."""
-        shap.summary_plot(shap_values, X_test)
-    def plot_force(self, shap_values, X_test, index=0):
-        """Plot SHAP Force Plot for a single prediction."""
-        if not hasattr(self, 'explainer'):
-            raise ValueError("SHAP explainer not created. Call explain_with_shap first.")
-        
-        # Generate the force plot for a single instance
-        shap.initjs()  # Initialize JS for Jupyter Notebook
-        shap.force_plot(self.explainer.expected_value, shap_values[index], X_test.iloc[index])
-    
-    def plot_dependence(self, shap_values, X_test, feature_name):
-        """Plot SHAP Dependence Plot for a specific feature."""
-        shap.dependence_plot(feature_name, shap_values, X_test)
