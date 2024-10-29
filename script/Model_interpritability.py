@@ -43,15 +43,17 @@ class ModelTrainer:
         print("Random Forest model trained and saved.")
 
         return self.X_train_res, self.X_test, self.y_train_res, self.y_test
+
     def explain_with_lime(self):
         """Explain predictions using LIME."""
         # Create LIME Explainer
         explainer = LimeTabularExplainer(
-            training_data=np.array(self.X_test),
+            training_data=np.array(self.X_train_res),
             mode='classification',
             feature_names=self.X_train_res.columns,
             class_names=['0', '1']
         )
+
         # Check if X_test is a DataFrame
         if isinstance(self.X_test, pd.DataFrame):
             # Get the first instance as a 1D array
@@ -69,8 +71,12 @@ class ModelTrainer:
 
     def explain_with_shap(self):
         """Explain predictions using SHAP."""
+        # Sample 100 rows from X_test
+        sample_size = min(100, len(self.X_test))  # Ensure not to exceed available data
+        X_test_sample = self.X_test.sample(n=sample_size, random_state=42)
+
         explainer = shap.Explainer(self.model, self.X_train_res)
-        shap_values = explainer(self.X_test)
+        shap_values = explainer(X_test_sample)
         return shap_values, explainer  # Return both shap values and explainer
 
     def shap_summary_plot(self, shap_values):
