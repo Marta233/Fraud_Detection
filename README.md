@@ -31,11 +31,11 @@ The trained model is packaged and deployed as a web service, enabling integratio
 - **Online Learning**: Implementing adaptive models that update as new fraud patterns emerge.
 
 ## Installation and Usage
-[Please refer to the project documentation for setup instructions and usage guidelines for the fraud detection model.](https://github.com/getahunTiruneh/Fraud-Detection.git)
+[Please refer to the project documentation for setup instructions and usage guidelines for the fraud detection model.](https://github.com/Marta233/Fraud_Detection.git)
 ### 1. Clone the Repository
 To get started, clone the project repository to your local machine:
 ```bash
-git clone https://github.com/getahunTiruneh/Fraud-Detection.git
+git clone https://github.com/Marta233/Fraud_Detection.git
 ```
 cd Fraud-Detection
 ### 2. Set Up a Virtual Environment (venv)
